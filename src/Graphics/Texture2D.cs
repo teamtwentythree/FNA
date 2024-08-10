@@ -1,6 +1,6 @@
 #region License
 /* FNA - XNA4 Reimplementation for Desktop Platforms
- * Copyright 2009-2023 Ethan Lee and the MonoGame Team
+ * Copyright 2009-2024 Ethan Lee and the MonoGame Team
  *
  * Released under the Microsoft Public License.
  * See LICENSE for details.
@@ -188,7 +188,7 @@ namespace Microsoft.Xna.Framework.Graphics
 				h = Math.Max(Height >> level, 1);
 			}
 			int elementSize = MarshalHelper.SizeOf<T>();
-			int requiredBytes = (w * h * GetFormatSize(Format)) / GetBlockSizeSquared(Format);
+			int requiredBytes = (w * h * GetFormatSizeEXT(Format)) / GetBlockSizeSquaredEXT(Format);
 			int availableBytes = elementCount * elementSize;
 			if (requiredBytes > availableBytes)
 			{
@@ -345,7 +345,7 @@ namespace Microsoft.Xna.Framework.Graphics
 				quality = 100; // FIXME: What does XNA pick for quality? -flibit
 			}
 
-			int len = Width * Height * GetFormatSize(Format);
+			int len = Width * Height * GetFormatSizeEXT(Format);
 			IntPtr data = FNAPlatform.Malloc(len);
 			FNA3D.FNA3D_GetTextureData2D(
 				GraphicsDevice.GLDevice,
@@ -374,7 +374,7 @@ namespace Microsoft.Xna.Framework.Graphics
 
 		public void SaveAsPng(Stream stream, int width, int height)
 		{
-			int len = Width * Height * GetFormatSize(Format);
+			int len = Width * Height * GetFormatSizeEXT(Format);
 			IntPtr data = FNAPlatform.Malloc(len);
 			FNA3D.FNA3D_GetTextureData2D(
 				GraphicsDevice.GLDevice,
@@ -419,6 +419,8 @@ namespace Microsoft.Xna.Framework.Graphics
 				out height,
 				out len
 			);
+			if ((pixels == IntPtr.Zero) || (width <= 0) || (height <= 0))
+				throw new Exception("Decoding image failed!");
 
 			Texture2D result = new Texture2D(
 				graphicsDevice,
@@ -458,6 +460,8 @@ namespace Microsoft.Xna.Framework.Graphics
 				height,
 				zoom
 			);
+			if ((pixels == IntPtr.Zero) || (realWidth <= 0) || (realHeight <= 0))
+				throw new Exception("Decoding image failed!");
 
 			Texture2D result = new Texture2D(
 				graphicsDevice,

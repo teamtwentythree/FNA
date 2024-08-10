@@ -1,6 +1,6 @@
 #region License
 /* FNA - XNA4 Reimplementation for Desktop Platforms
- * Copyright 2009-2023 Ethan Lee and the MonoGame Team
+ * Copyright 2009-2024 Ethan Lee and the MonoGame Team
  *
  * Released under the Microsoft Public License.
  * See LICENSE for details.
@@ -35,6 +35,8 @@ namespace Microsoft.Xna.Framework
 		) == "1";
 
 		private static bool SupportsGlobalMouse;
+
+		private static bool SupportsOrientations;
 
 		#endregion
 
@@ -81,8 +83,7 @@ namespace Microsoft.Xna.Framework
 			SDL.SDL_SetMainReady();
 
 			// Also, Windows is an idiot. -flibit
-			if (	OSVersion.Equals("Windows") ||
-				OSVersion.Equals("WinRT")	)
+			if (OSVersion.Equals("Windows"))
 			{
 				// Visual Studio is an idiot.
 				if (System.Diagnostics.Debugger.IsAttached)
@@ -155,42 +156,48 @@ namespace Microsoft.Xna.Framework
 			{
 				if (arg == "es3")
 				{
-					Environment.SetEnvironmentVariable(
+					SDL.SDL_SetHintWithPriority(
 						"FNA3D_OPENGL_FORCE_ES3",
-						"1"
+						"1",
+						SDL.SDL_HintPriority.SDL_HINT_OVERRIDE
 					);
 				}
 				else if (arg == "core")
 				{
-					Environment.SetEnvironmentVariable(
+					SDL.SDL_SetHintWithPriority(
 						"FNA3D_OPENGL_FORCE_CORE_PROFILE",
-						"1"
+						"1",
+						SDL.SDL_HintPriority.SDL_HINT_OVERRIDE
 					);
 				}
 				else if (arg == "compatibility")
 				{
-					Environment.SetEnvironmentVariable(
+					SDL.SDL_SetHintWithPriority(
 						"FNA3D_OPENGL_FORCE_COMPATIBILITY_PROFILE",
-						"1"
+						"1",
+						SDL.SDL_HintPriority.SDL_HINT_OVERRIDE
 					);
 				}
 			}
 			if (args.TryGetValue("angle", out arg) && arg == "1")
 			{
-				Environment.SetEnvironmentVariable(
+				SDL.SDL_SetHintWithPriority(
 					"FNA3D_OPENGL_FORCE_ES3",
-					"1"
+					"1",
+					SDL.SDL_HintPriority.SDL_HINT_OVERRIDE
 				);
-				Environment.SetEnvironmentVariable(
+				SDL.SDL_SetHintWithPriority(
 					"SDL_OPENGL_ES_DRIVER",
-					"1"
+					"1",
+					SDL.SDL_HintPriority.SDL_HINT_OVERRIDE
 				);
 			}
 			if (args.TryGetValue("forcemailboxvsync", out arg) && arg == "1")
 			{
-				Environment.SetEnvironmentVariable(
+				SDL.SDL_SetHintWithPriority(
 					"FNA3D_VULKAN_FORCE_MAILBOX_VSYNC",
-					"1"
+					"1",
+					SDL.SDL_HintPriority.SDL_HINT_OVERRIDE
 				);
 			}
 
@@ -205,7 +212,11 @@ namespace Microsoft.Xna.Framework
 			 */
 			if (args.TryGetValue("audiodriver", out arg))
 			{
-				Environment.SetEnvironmentVariable("SDL_AUDIODRIVER", arg);
+				SDL.SDL_SetHintWithPriority(
+					"SDL_AUDIODRIVER",
+					arg,
+					SDL.SDL_HintPriority.SDL_HINT_OVERRIDE
+				);
 			}
 
 			// This _should_ be the first real SDL call we make...
@@ -226,6 +237,10 @@ namespace Microsoft.Xna.Framework
 			SupportsGlobalMouse = (	OSVersion.Equals("Windows") ||
 						OSVersion.Equals("Mac OS X") ||
 						videoDriver.Equals("x11")	);
+
+			// Only iOS and Android care about device orientation.
+			SupportsOrientations = ( OSVersion.Equals("iOS") ||
+						 OSVersion.Equals("Android")	);
 
 			/* High-DPI is really annoying and only some platforms
 			 * actually let you control the drawable surface.
@@ -253,8 +268,7 @@ namespace Microsoft.Xna.Framework
 			 * the user (rightfully) will have no idea why.
 			 * -flibit
 			 */
-			if (	OSVersion.Equals("Windows") ||
-				OSVersion.Equals("WinRT")	)
+			if (OSVersion.Equals("Windows"))
 			{
 				SDL.SDL_SetHint(
 					SDL.SDL_HINT_VIDEO_MINIMIZE_ON_FOCUS_LOSS,
@@ -291,8 +305,7 @@ namespace Microsoft.Xna.Framework
 				INTERNAL_AddInstance(evt[0].cdevice.which);
 			}
 
-			if (	OSVersion.Equals("Windows") ||
-				OSVersion.Equals("WinRT")	)
+			if (OSVersion.Equals("Windows"))
 			{
 				/* Windows has terrible event pumping and doesn't give us
 				 * WM_PAINT events correctly. So we get to do this!
@@ -310,7 +323,7 @@ namespace Microsoft.Xna.Framework
 			}
 
 			/* Minimal, Portable, SDL-based Tesla Splash.
-			 * Copyright (c) 2022-2023 Ethan Lee
+			 * Copyright (c) 2022-2024 Ethan Lee
 			 * Released under the zlib license:
 			 * https://www.zlib.net/zlib_license.html
 			 *
@@ -381,6 +394,15 @@ namespace Microsoft.Xna.Framework
 		public static IntPtr Malloc(int size)
 		{
 			return SDL.SDL_malloc((IntPtr) size);
+		}
+
+		#endregion
+
+		#region Environment
+
+		public static void SetEnv(string name, string value)
+		{
+			SDL.SDL_SetHintWithPriority(name, value, SDL.SDL_HintPriority.SDL_HINT_OVERRIDE);
 		}
 
 		#endregion
@@ -855,6 +877,7 @@ namespace Microsoft.Xna.Framework
 					return DisplayOrientation.LandscapeRight;
 
 				case SDL.SDL_DisplayOrientation.SDL_ORIENTATION_PORTRAIT:
+				case SDL.SDL_DisplayOrientation.SDL_ORIENTATION_PORTRAIT_FLIPPED:
 					return DisplayOrientation.Portrait;
 
 				default:
@@ -898,7 +921,7 @@ namespace Microsoft.Xna.Framework
 
 		public static bool SupportsOrientationChanges()
 		{
-			return OSVersion.Equals("iOS") || OSVersion.Equals("Android");
+			return SupportsOrientations;
 		}
 
 		#endregion
@@ -1109,6 +1132,12 @@ namespace Microsoft.Xna.Framework
 						int newIndex = SDL.SDL_GetWindowDisplayIndex(
 							game.Window.Handle
 						);
+
+						if (newIndex >= GraphicsAdapter.Adapters.Count)
+						{
+							GraphicsAdapter.AdaptersChanged(); // quickfix for this event coming in before the display reattach event. (must be fixed in sdl)
+						}
+
 						if (GraphicsAdapter.Adapters[newIndex] != currentAdapter)
 						{
 							currentAdapter = GraphicsAdapter.Adapters[newIndex];
@@ -1143,16 +1172,19 @@ namespace Microsoft.Xna.Framework
 					// Orientation Change
 					if (evt.display.displayEvent == SDL.SDL_DisplayEventID.SDL_DISPLAYEVENT_ORIENTATION)
 					{
-						DisplayOrientation orientation = INTERNAL_ConvertOrientation(
-							(SDL.SDL_DisplayOrientation) evt.display.data1
-						);
+						if (SupportsOrientationChanges())
+						{
+							DisplayOrientation orientation = INTERNAL_ConvertOrientation(
+								(SDL.SDL_DisplayOrientation) evt.display.data1
+							);
 
-						INTERNAL_HandleOrientationChange(
-							orientation,
-							game.GraphicsDevice,
-							currentAdapter,
-							(FNAWindow) game.Window
-						);
+							INTERNAL_HandleOrientationChange(
+								orientation,
+								game.GraphicsDevice,
+								currentAdapter,
+								(FNAWindow) game.Window
+							);
+						}
 					}
 					else
 					{
@@ -1404,6 +1436,12 @@ namespace Microsoft.Xna.Framework
 					SDL.SDL_bool.SDL_TRUE :
 					SDL.SDL_bool.SDL_FALSE
 			);
+			if (enable)
+			{
+			    // Flush this value, it's going to be jittery
+			    int filler;
+			    SDL.SDL_GetRelativeMouseState(out filler, out filler);
+			}
 		}
 
 		#endregion
@@ -1520,12 +1558,6 @@ namespace Microsoft.Xna.Framework
 
 		public static DriveInfo GetDriveInfo(string storageRoot)
 		{
-			if (OSVersion.Equals("WinRT"))
-			{
-				// WinRT DriveInfo is a bunch of crap -flibit
-				return null;
-			}
-
 			DriveInfo result;
 			try
 			{
@@ -2246,6 +2278,26 @@ namespace Microsoft.Xna.Framework
 					product & 0xFF,
 					product >> 8
 				);
+			}
+
+			if (vendor == 0x28de) // Valve
+			{
+				SDL.SDL_GameControllerType gct = SDL.SDL_GameControllerGetType(
+					INTERNAL_devices[which]
+				);
+				if (	gct == SDL.SDL_GameControllerType.SDL_CONTROLLER_TYPE_XBOX360 ||
+					gct == SDL.SDL_GameControllerType.SDL_CONTROLLER_TYPE_XBOXONE	)
+				{
+					INTERNAL_guids[which] = "xinput";
+				}
+				else if (gct == SDL.SDL_GameControllerType.SDL_CONTROLLER_TYPE_PS4)
+				{
+					INTERNAL_guids[which] = "4c05c405";
+				}
+				else if (gct == SDL.SDL_GameControllerType.SDL_CONTROLLER_TYPE_PS5)
+				{
+					INTERNAL_guids[which] = "4c05e60c";
+				}
 			}
 
 			// Print controller information to stdout.
